@@ -1,0 +1,120 @@
+---
+name: qa
+description: QA checklist for React Native + Django full-stack apps. Use when the user says "test this", "what could go wrong", "check before release", or "write test cases".
+---
+
+You are QA for a React Native + Django full-stack app.
+
+## The core question for every feature
+
+For each piece of functionality, ask:
+1. What happens on the happy path?
+2. What happens when the network fails mid-request?
+3. What happens when the server returns an unexpected shape?
+4. What happens when the user does it twice fast?
+5. What happens on a slow device / slow connection?
+
+---
+
+## Frontend — React Native checklist
+
+### State & data
+- [ ] Loading state shown while data is fetching
+- [ ] Empty state shown when list returns zero items
+- [ ] Error state shown when request fails (not just silent failure)
+- [ ] Data persists correctly after navigating away and returning (`useFocusEffect` reload)
+- [ ] State reset when it should be (e.g. form clears after submit)
+- [ ] No stale closure reading old state in `useEffect` or `useCallback`
+
+### Navigation
+- [ ] Back button works and goes to the right screen
+- [ ] `replace` used instead of `navigate` for auth gates and onboarding (no back-button escape)
+- [ ] Deep navigation state survives app backgrounding
+- [ ] Screen doesn't flash the previous state before loading new data
+
+### Inputs & forms
+- [ ] Submit disabled while loading (no double-submit)
+- [ ] Keyboard dismisses on submit
+- [ ] `placeholderTextColor` set explicitly (invisible on dark backgrounds otherwise)
+- [ ] `autoComplete` and `keyboardType` set correctly on email/password fields
+- [ ] Error message shown inline, not just a border change
+- [ ] Form resets or preserves state correctly after error
+
+### Device / platform
+- [ ] Tested on physical Android device, not just emulator
+- [ ] Shadows use `elevation` on Android, `shadow*` props on iOS
+- [ ] `KeyboardAvoidingView` behavior: `padding` on iOS, `height` on Android
+- [ ] `includeFontPadding: false` on Android text that needs precise vertical alignment
+- [ ] Audio permissions requested before first record attempt
+- [ ] App icon appears correctly (mipmap directories updated — not just app.json)
+
+### Known React Native / Expo gotchas (Witly battle-tested)
+- **Hermes doesn't support `ReadableStream`** — use `axios` with `responseType: 'json'`, not fetch streaming
+- **`useFocusEffect` + async** — never pass async directly; use inner `async function fetch()` pattern
+- **`expo prebuild` resets mipmap directories** — re-apply icon after every prebuild
+- **SecureStore has a 2048 byte limit** — store large data in AsyncStorage, reference key in SecureStore
+- **`registerRootComponent` required** — without `index.js` entry point, app fails on physical device
+
+---
+
+## Backend — Django / DRF checklist
+
+### API endpoints
+- [ ] Unauthenticated request returns 401, not 500
+- [ ] Missing required fields return 400 with clear error message, not 500
+- [ ] Malformed JSON body returns 400
+- [ ] Extra/unknown fields in request body are ignored (not crash)
+- [ ] Response shape is consistent — same fields present whether list is empty or not
+
+### Database
+- [ ] No N+1 queries — use `select_related` / `prefetch_related` on FKs in list views
+- [ ] Migrations applied before testing new model fields
+- [ ] `on_delete` behaviour tested for FK relationships (SET_NULL vs CASCADE)
+- [ ] Unique constraints tested — duplicate submissions return 400 not 500
+
+### Auth & permissions
+- [ ] JWT-protected endpoints reject expired tokens (401)
+- [ ] Users cannot access other users' data (test with two accounts)
+- [ ] Onboarding gate (403) enforced before AI endpoints
+- [ ] Sensitive fields (`password`, API keys) never appear in API responses
+
+### AI / external services
+- [ ] Empty input to AI endpoint handled before hitting the API
+- [ ] AI response JSON parse failure handled gracefully (try/except around `json.loads`)
+- [ ] Whisper transcription < 10 chars rejected before AI call
+- [ ] Rate limit / timeout from Claude/OpenAI handled with user-facing error, not 500
+
+---
+
+## Integration — full-stack checklist
+
+- [ ] Device can reach backend IP (`ALLOWED_HOSTS` includes device's local IP)
+- [ ] Token refresh flow works: expired access token → auto-refresh → retry original request
+- [ ] Logout clears tokens from SecureStore AND blacklists on backend (if enabled)
+- [ ] Redis cache invalidated when profile updated — AI doesn't serve stale personality data
+- [ ] `docker compose up` brings all services up cleanly from scratch on a fresh machine
+
+---
+
+## Pre-release checklist
+
+- [ ] No debug `print` / `console.log` statements left in production code
+- [ ] No hardcoded IPs or local URLs in frontend service files
+- [ ] `.env` / `.env.local` files not committed (check `.gitignore`)
+- [ ] API keys not in source code or logs
+- [ ] Error responses don't leak stack traces or internal model details
+- [ ] Migrations committed alongside model changes
+
+---
+
+## Edge cases by feature area (Witly reference)
+
+| Feature | Edge case to test |
+|---------|------------------|
+| Moments | 19-exchange cap — 20th message auto-archives |
+| Moments | Unarchive fails if already at 5 active cap |
+| Feedback | Same feedback type twice → undo (toggle off), not duplicate |
+| Voice | Empty recording (< 10 chars transcription) handled gracefully |
+| Live Mode | `relationship_context` omitted → defaults to `'other'`, not crash |
+| Copy tracking | Duplicate copy of same option → `get_or_create`, not 500 |
+| Onboarding gate | Accessing AI endpoint before profile complete → 403 |
