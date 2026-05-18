@@ -24,20 +24,19 @@ Only report what you actually find. Don't manufacture issues to seem thorough.
 - `.env` / `.env.local` in `.gitignore` — not committed
 - Backend env vars read via `decouple` or `os.environ` — not hardcoded in settings
 - Client-side code never receives server-only secrets (Next.js API routes keep keys server-side)
-- `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` accessed only in `ai_service.py`, never in views or serializers
+- AI API keys accessed only in the AI service file, never in views or serializers
 
 ### Authentication & authorisation
 - Every DRF view that touches user data has `permission_classes = [IsAuthenticated]`
 - No view accidentally returns another user's data — queryset filtered by `request.user`
 - JWT tokens not logged anywhere
 - Password fields use `write_only=True` in serializers — never in responses
-- `BLACKLIST_AFTER_ROTATION` — note if disabled (it is in Witly dev; flag before production)
+- Token blacklisting — note if disabled (flag before production)
 
 ### Input validation
 - User-supplied strings used in raw SQL → immediate critical flag (use ORM)
 - File uploads validate type/size before processing
-- Whisper audio upload: file field present, type checked
-- Email fields validated before hitting external APIs (Loops, etc.)
+- Email fields validated before hitting external APIs
 
 ### Frontend secrets
 - No `NEXT_PUBLIC_` prefix on secret env vars — those are exposed to the browser
@@ -89,7 +88,7 @@ Only report what you actually find. Don't manufacture issues to seem thorough.
 
 ### File structure
 - API calls only in `frontend/src/services/` — never directly in screens
-- All AI calls go through `backend/services/ai_service.py` — never in views directly
+- All AI calls go through the AI service — never in views directly
 - Types in `src/types/` — not defined inline in component files
 - Constants in `src/constants/` — not scattered as magic strings
 

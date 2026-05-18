@@ -17,7 +17,7 @@ You are managing state in a React Native app using Context API and hooks.
 | Side effects on mount | `useEffect` |
 | Side effects on screen focus | `useFocusEffect` (React Navigation) |
 
-## Context pattern (Witly reference)
+## Context pattern
 
 ```tsx
 // src/context/AuthContext.tsx
@@ -137,7 +137,7 @@ useFocusEffect(
   useCallback(() => {
     async function fetch() { ... }
     fetch()
-  }, [showArchived])
+  }, [dep])
 )
 ```
 
@@ -146,16 +146,16 @@ Use when: passing a callback to a child component (prevents unnecessary re-rende
 ## Per-item state (Record pattern)
 
 ```tsx
-// Track state per message ID without an array of objects
-const [msgFeedback, setMsgFeedback] = useState<Record<number, string | null>>({})
-const [msgCopied, setMsgCopied] = useState<Record<number, string | null>>({})
-const [deliveryExpanded, setDeliveryExpanded] = useState<Record<number, boolean>>({})
+// Track state per item ID without an array of objects
+const [itemFeedback, setItemFeedback] = useState<Record<number, string | null>>({})
+const [itemCopied, setItemCopied] = useState<Record<number, string | null>>({})
+const [expanded, setExpanded] = useState<Record<number, boolean>>({})
 
 // Update one item
-setMsgFeedback(prev => ({ ...prev, [msg.id]: 'loved' }))
+setItemFeedback(prev => ({ ...prev, [item.id]: 'liked' }))
 
 // Read
-const feedback = msgFeedback[msg.id] ?? null
+const feedback = itemFeedback[item.id] ?? null
 ```
 
 ## State machine pattern

@@ -161,7 +161,7 @@ Profile onboarding gate: `is_onboarding_complete` field on UserProfile. AI endpo
 | Session / JWT | No (SecureStore) | — | Logout |
 | Feature flags | Optional | 5 min | Deploy |
 
-Cache key pattern: `witly:profile:{user_id}` — namespaced to avoid collisions.
+Cache key pattern: `<app>:<entity_type>:{id}` — namespaced to avoid collisions across services (e.g. `myapp:profile:42`).
 
 ---
 

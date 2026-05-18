@@ -3,7 +3,7 @@ name: jwt-auth
 description: Implement or audit JWT authentication — token lifecycle, refresh flow, blacklisting. Use when the user says "add auth", "implement JWT", "handle token refresh", or "audit the auth flow".
 ---
 
-You are implementing or auditing JWT authentication in a Django + React Native stack.
+You are implementing or auditing JWT authentication.
 
 ## How JWT works
 
@@ -16,7 +16,7 @@ You are implementing or auditing JWT authentication in a Django + React Native s
 6. Refresh token expires → user must log in again
 ```
 
-## Witly reference implementation
+## Reference implementation
 
 ### Backend (djangorestframework-simplejwt)
 
@@ -57,8 +57,8 @@ urlpatterns = [
 // src/services/authService.ts
 import * as SecureStore from 'expo-secure-store'
 
-const ACCESS_KEY  = 'witly_access_token'
-const REFRESH_KEY = 'witly_refresh_token'
+const ACCESS_KEY  = '<app>_access_token'
+const REFRESH_KEY = '<app>_refresh_token'
 
 export async function login(email: string, password: string) {
   const res = await axios.post('/api/auth/token/', { email, password })

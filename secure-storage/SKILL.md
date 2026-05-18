@@ -18,16 +18,16 @@ You are managing secure persistent storage in a React Native + Expo bare workflo
 
 **Rule:** anything that grants access or reveals identity → SecureStore. Preferences → either.
 
-## Key naming convention (Witly reference)
+## Key naming convention
 
 ```typescript
-// src/services/apiClient.ts
-const ACCESS_KEY = 'witly_access_token'
-const REFRESH_KEY = 'witly_refresh_token'
-const THEME_KEY = 'witly_theme'
+// src/services/apiClient.ts  (or src/constants/storage.ts)
+const ACCESS_KEY  = '<app>_access_token'
+const REFRESH_KEY = '<app>_refresh_token'
+const THEME_KEY   = '<app>_theme'
 ```
 
-Use app-prefixed keys (`witly_`) so multiple apps on a device don't collide.
+Use app-prefixed keys so multiple apps on a device don't collide. Define all keys as constants in one place — never scatter key strings across files.
 
 ## Auth token storage pattern
 
@@ -107,7 +107,7 @@ api.interceptors.response.use(
 
 ```typescript
 // ThemeContext.tsx (React Native version)
-const THEME_KEY = 'witly_theme'
+const THEME_KEY = '<app>_theme'
 
 useEffect(() => {
   async function load() {
@@ -138,12 +138,12 @@ SecureStore values are capped at 2048 bytes. For larger payloads:
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 // Write
-await AsyncStorage.setItem('witly_profile_cache', JSON.stringify(profile))
-await SecureStore.setItemAsync('witly_cache_version', '1')
+await AsyncStorage.setItem('<app>_profile_cache', JSON.stringify(profile))
+await SecureStore.setItemAsync('<app>_cache_version', '1')
 
 // Read
-const version = await SecureStore.getItemAsync('witly_cache_version')
-const cached = version ? await AsyncStorage.getItem('witly_profile_cache') : null
+const version = await SecureStore.getItemAsync('<app>_cache_version')
+const cached = version ? await AsyncStorage.getItem('<app>_profile_cache') : null
 ```
 
 ## Availability check
@@ -163,4 +163,4 @@ if (!available) {
 - Forgetting `deleteItemAsync` on logout — user uninstalls and reinstalls but token is still in keychain (iOS). Always delete on explicit logout.
 - Storing large JSON directly — SecureStore will silently fail or truncate. Store small primitives; large objects go in AsyncStorage with a SecureStore key.
 - Reading SecureStore synchronously — there is no synchronous API. Use `isLoading` state to gate the UI while reading.
-- Hardcoded key strings scattered across files — define all keys as constants in one place (`apiClient.ts` or `constants/storage.ts`).
+- Hardcoded key strings scattered across files — define all keys as constants in one place.

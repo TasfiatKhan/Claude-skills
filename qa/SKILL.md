@@ -45,15 +45,15 @@ For each piece of functionality, ask:
 - [ ] Shadows use `elevation` on Android, `shadow*` props on iOS
 - [ ] `KeyboardAvoidingView` behavior: `padding` on iOS, `height` on Android
 - [ ] `includeFontPadding: false` on Android text that needs precise vertical alignment
-- [ ] Audio permissions requested before first record attempt
-- [ ] App icon appears correctly (mipmap directories updated — not just app.json)
+- [ ] Audio permissions requested before first record attempt (if audio feature present)
+- [ ] App icon appears correctly on device (not the default robot)
 
-### Known React Native / Expo gotchas (Witly battle-tested)
+### Known React Native / Expo gotchas
 - **Hermes doesn't support `ReadableStream`** — use `axios` with `responseType: 'json'`, not fetch streaming
 - **`useFocusEffect` + async** — never pass async directly; use inner `async function fetch()` pattern
-- **`expo prebuild` resets mipmap directories** — re-apply icon after every prebuild
+- **`expo prebuild` resets mipmap directories** — re-apply icon after every prebuild (Android bare workflow)
 - **SecureStore has a 2048 byte limit** — store large data in AsyncStorage, reference key in SecureStore
-- **`registerRootComponent` required** — without `index.js` entry point, app fails on physical device
+- **`registerRootComponent` required** — without `index.js` entry point, app fails on physical device (bare workflow)
 
 ---
 
@@ -75,23 +75,23 @@ For each piece of functionality, ask:
 ### Auth & permissions
 - [ ] JWT-protected endpoints reject expired tokens (401)
 - [ ] Users cannot access other users' data (test with two accounts)
-- [ ] Onboarding gate (403) enforced before AI endpoints
+- [ ] Onboarding / setup gate enforced before gated features
 - [ ] Sensitive fields (`password`, API keys) never appear in API responses
 
 ### AI / external services
 - [ ] Empty input to AI endpoint handled before hitting the API
 - [ ] AI response JSON parse failure handled gracefully (try/except around `json.loads`)
-- [ ] Whisper transcription < 10 chars rejected before AI call
-- [ ] Rate limit / timeout from Claude/OpenAI handled with user-facing error, not 500
+- [ ] Audio transcription < threshold characters rejected before AI call (if voice feature)
+- [ ] Rate limit / timeout from AI provider handled with user-facing error, not 500
 
 ---
 
 ## Integration — full-stack checklist
 
-- [ ] Device can reach backend IP (`ALLOWED_HOSTS` includes device's local IP)
+- [ ] Device can reach backend (ALLOWED_HOSTS includes device's local IP in dev)
 - [ ] Token refresh flow works: expired access token → auto-refresh → retry original request
 - [ ] Logout clears tokens from SecureStore AND blacklists on backend (if enabled)
-- [ ] Redis cache invalidated when profile updated — AI doesn't serve stale personality data
+- [ ] Redis cache invalidated when profile updated — AI doesn't serve stale data
 - [ ] `docker compose up` brings all services up cleanly from scratch on a fresh machine
 
 ---
@@ -107,14 +107,14 @@ For each piece of functionality, ask:
 
 ---
 
-## Edge cases by feature area (Witly reference)
+## Edge cases by feature type
 
-| Feature | Edge case to test |
-|---------|------------------|
-| Moments | 19-exchange cap — 20th message auto-archives |
-| Moments | Unarchive fails if already at 5 active cap |
-| Feedback | Same feedback type twice → undo (toggle off), not duplicate |
-| Voice | Empty recording (< 10 chars transcription) handled gracefully |
-| Live Mode | `relationship_context` omitted → defaults to `'other'`, not crash |
-| Copy tracking | Duplicate copy of same option → `get_or_create`, not 500 |
-| Onboarding gate | Accessing AI endpoint before profile complete → 403 |
+| Feature type | Edge cases to test |
+|-------------|------------------|
+| Paginated list | Empty list, single item, last page has fewer items than page size |
+| Item with cap | At cap — creation returns 403; below cap — succeeds |
+| Toggle/undo action | Same action twice → undone; different action → replaces |
+| Voice input | Empty/silent recording handled gracefully (< threshold transcription) |
+| File upload | Wrong type rejected; oversized file rejected; missing file returns 400 |
+| Multi-turn thread | At message cap — auto-archives; unarchive at cap fails with 403 |
+| Copy tracking | Duplicate copy of same item → `get_or_create`, not duplicate row |

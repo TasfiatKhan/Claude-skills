@@ -29,15 +29,15 @@ Service layer         — external calls: AI API, DB, cache, email, storage
 - Orchestrates what happens: calls the right services in the right order
 - Enforces rules: caps, permissions, rate limits, state transitions
 - Does NOT know about HTTP or UI
-- Examples: `ai_service.py`, `moments_service.py`, profile cache logic
+- Examples: `ai_service.py`, domain service modules, profile cache logic
 
 ### Service layer (external integrations)
-- Thin wrappers around external systems: Claude API, OpenAI, PostgreSQL, Redis
+- Thin wrappers around external systems: AI API, email, storage, Redis
 - No business rules — just "call this, return that"
-- Swappable: changing from OpenAI to Anthropic only touches this layer
-- Examples: `ai_service.py` Claude calls, `redis_client.py`, ORM queries in managers
+- Swappable: changing from one AI provider to another only touches this layer
+- Examples: AI API client, `redis_client.py`, ORM queries in managers
 
-## Witly reference implementation
+## Reference implementation
 
 ```
 frontend/
@@ -46,16 +46,16 @@ frontend/
   context/          ← shared state (auth, theme)
 
 backend/
-  apps/humor/views.py     ← transport: validates request, returns JSON
-  services/ai_service.py  ← business + service: assembles prompt, calls Claude
-  prompts/v2/             ← configuration: prompt templates, versioned
-  apps/profiles/cache.py  ← service: Redis get/set for profile data
+  apps/<feature>/views.py   ← transport: validates request, returns JSON
+  services/ai_service.py    ← business + service: assembles prompt, calls AI
+  prompts/v2/               ← configuration: prompt templates, versioned
+  apps/<feature>/cache.py   ← service: Redis get/set for cached data
 ```
 
-**Key rule enforced in Witly:**
-- Views never call `anthropic.Client()` directly — always through `ai_service`
+**Key rule:**
+- Views never call the AI client directly — always through `ai_service`
 - Screens never call `axios.get()` directly — always through `src/services/`
-- This means: swapping Claude for another model = one file change. Swapping axios for fetch = one file change.
+- This means: swapping the AI model = one file change. Swapping axios for fetch = one file change.
 
 ## When to apply this
 
@@ -66,7 +66,7 @@ backend/
 
 ### Auditing existing code
 Look for these violations:
-- API calls (`axios`, `fetch`, `anthropic.Client`) inside screens or views → move to services
+- API calls (`axios`, `fetch`, AI client) inside screens or views → move to services
 - Business rules (caps, permissions, state checks) inside views → move to a service
 - HTTP concepts (`request.data`, status codes) inside service files → move to views
 - Duplicated logic across multiple views → extract to a shared service

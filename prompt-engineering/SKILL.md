@@ -3,7 +3,7 @@ name: prompt-engineering
 description: Write or audit AI prompts — multi-layer architecture, tone calibration, structured output, quality testing. Use when the user says "write a prompt", "improve this prompt", "audit the prompts", or "the AI output isn't good enough".
 ---
 
-You are writing or auditing AI prompts for a social intelligence application.
+You are writing or auditing AI prompts for an application.
 
 ## Multi-layer prompt architecture
 
@@ -17,22 +17,24 @@ Layer 3 — Request (what the user specifically needs)
 
 This lets you improve each layer independently and reuse the personality layer across modes.
 
-## Witly reference: three prompt files
+## Reference: multi-mode prompt file structure
 
 ```
 prompts/v2/
-  system_personality.txt   ← Layer 1: loaded as system prompt, applies to all modes
-  texting_mode.txt         ← Layer 2+3: texting-specific context and request
-  live_mode.txt            ← Layer 2+3: live mode context and constraints
-  moments_mode.txt         ← Layer 2+3: ongoing situation context and request
+  system.txt           ← Layer 1: loaded as system prompt, applies to all modes
+  mode_a.txt           ← Layer 2+3: context and request for mode A
+  mode_b.txt           ← Layer 2+3: context and request for mode B
+  mode_c.txt           ← Layer 2+3: ongoing/conversational mode
 ```
+
+One system prompt shared across all modes. Mode-specific prompts handle situational framing and output format.
 
 ## VAR substitution pattern
 
 Use `{var_name}` placeholders replaced with `str.replace()` — not `.format()`:
 
 ```python
-template = open('prompts/v2/system_personality.txt').read()
+template = open('prompts/v2/system.txt').read()
 for key, value in profile.items():
     template = template.replace('{' + key + '}', str(value))
 ```
@@ -42,18 +44,16 @@ for key, value in profile.items():
 ## What makes a good system prompt
 
 ```
-You are a socially intelligent coach — like a friend who's naturally good
-with people, reads any room without trying, and gives advice that works
-because it sounds like a human said it.
+You are [role description — told through analogy, not job title].
 
-You are not here to write impressive lines. You are here to offer options
-that help people sound like a more comfortable, natural version of themselves.
+You are NOT here to [anti-identity — what the AI explicitly should not do].
+You ARE here to [positive identity — what success looks like].
 ```
 
 Key elements:
 - **Identity** — who is the AI, told through analogy not job title
 - **Anti-identity** — what the AI explicitly is NOT (equally important)
-- **Calibration inputs** — the user's profile vars that shape every response
+- **Calibration inputs** — user profile vars that shape every response
 - **Quality test** — an internal check the AI runs before outputting
 - **Output schema** — exact JSON structure, field by field
 - **Rules** — hard constraints listed explicitly
@@ -61,9 +61,9 @@ Key elements:
 ## Quality test (embed in every prompt)
 
 ```
-Before writing each option, ask internally:
-"Would a naturally smooth, socially aware person actually say this out loud
-in this exact moment, without having pre-planned it?"
+Before writing each response, ask internally:
+"Would a real person actually say this naturally in this exact moment,
+without it sounding scripted or AI-generated?"
 If no, rewrite it.
 ```
 
@@ -71,17 +71,16 @@ This single instruction eliminates most AI-sounding output.
 
 ## Tone calibration
 
-The profile vars in `system_personality.txt` let the same prompt serve very different users:
+Profile vars in the system prompt let the same prompt serve very different users:
 
 ```
-- Natural style: {humor_style}         → dry, warm, sarcastic, observational
-- Social style: {persona_type}         → The Charmer, The Observer, etc.
-- Confidence level: {confidence_level} → shy, moderate, confident, fearless
-- Social anxiety: {social_anxiety_level} → none, mild, moderate, high
+- Communication style: {communication_style}   → formal, casual, dry, warm
+- Confidence level: {confidence_level}         → low, moderate, high
+- Expertise level: {expertise_level}           → beginner, intermediate, expert
+- Context preference: {context_preference}     → brief, detailed
 ```
 
-High anxiety → safe options are genuinely low-pressure, bold is toned down
-No anxiety → can push further, bold is more daring
+The values come from the user's profile — the same prompt serves every user without branching.
 
 ## Structured JSON output
 
@@ -92,37 +91,37 @@ Return ONLY a JSON object using exactly this structure:
 {
   "options": [
     { "type": "safe", "text": "...", "note": "..." },
-    { "type": "playful", "text": "...", "note": "..." },
-    { "type": "bold", "text": "...", "note": "..." }
+    { "type": "moderate", "text": "...", "note": "..." },
+    { "type": "direct", "text": "...", "note": "..." }
   ],
-  "delivery": "..."
+  "guidance": "..."
 }
 No markdown fences, no preamble, no commentary after.
 ```
 
-- `text` — the usable response, word-for-word, no placeholders
-- `note` — one sentence, framed as suggestion ("if the vibe feels right...")
-- `delivery` — 1-2 sentences of situational coaching
+- `text` — the usable response, no placeholders
+- `note` — one sentence of context or framing (suggestion form, not command)
+- `guidance` — 1-2 sentences of situational coaching
 
 ## Anti-patterns (enforce in prompt rules)
 
 ```
-- No workshopped punchlines
-- No screenwriter energy
-- No internet meme humor
-- No overly clever phrasing
+- No overly clever or workshopped phrasing
+- No AI-sounding phrases: "certainly", "of course", "great question", "absolutely"
+- No scripted or screenwriter energy
 - No forced humor
-- No emotional over-analysis in notes
-- No AI-sounding words: "certainly", "of course", "great question", "absolutely"
-- Nothing manipulative, passive-aggressive, or creepy
+- No emotional over-analysis
+- Nothing manipulative, passive-aggressive, or inappropriate
 ```
 
-## Length constraints (Live and Moments)
+## Length constraints
+
+For real-time or conversational modes, enforce brevity explicitly in the prompt:
 
 ```
-Every "text" must be 1-2 short lines — something they can say out loud in under 2 seconds.
+Every "text" must be 1-2 short sentences — something a person could say naturally in under 3 seconds.
 Note: one sentence only.
-Delivery: 1-2 sentences max.
+Guidance: 1-2 sentences max.
 ```
 
 Enforce with `max_tokens` in the API call as a hard ceiling.
@@ -130,15 +129,15 @@ Enforce with `max_tokens` in the API call as a hard ceiling.
 ## Prompt versioning
 
 - Keep prompts in `prompts/v{n}/` directories
-- Log `prompt_version` on every `AIResponseRecord`
+- Log `prompt_version` on every response record
 - This lets you compare output quality across versions using real feedback data
 - Never edit a deployed prompt file — create a new version
 
 ## Iterating on prompts
 
-1. Look at `ResponseFeedback` — which responses get "cringe" or "risky" tags?
-2. Read the actual `response_json` for those records
-3. Identify the pattern: is it the `bold` type? A specific relationship context?
+1. Look at feedback data — which responses get negative reactions?
+2. Read the actual response content for those records
+3. Identify the pattern: is it a specific option type? A specific context?
 4. Write a targeted rule in the prompt that addresses the pattern
 5. Deploy as `v3`, run both versions, compare feedback distribution
 6. Kill the worse one
@@ -146,7 +145,7 @@ Enforce with `max_tokens` in the API call as a hard ceiling.
 ## Common mistakes
 
 - One giant system prompt — hard to iterate, hard to understand
-- Inline prompt strings in Python — can't version, diff, or reuse
+- Inline prompt strings in code — can't version, diff, or reuse
 - No quality test — AI optimizes for impressiveness, not naturalness
 - Vague tone instructions ("be casual") — concrete examples work better
 - No anti-patterns list — the AI will do the thing you didn't say not to do

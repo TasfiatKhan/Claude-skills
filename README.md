@@ -20,10 +20,17 @@ Claude Code will pick them up automatically on any project.
 
 ## Skills
 
-### Architecture & planning
+### Lead architects (start here)
 | Skill | Description |
 |-------|-------------|
+| `backend-lead` | Backend decision framework — data modelling, API contracts, auth, caching, security |
+| `frontend-lead` | Web frontend decision framework — component architecture, state, routing, theming |
+| `app-lead` | Mobile app decision framework — navigation, native modules, storage, platform differences |
 | `architect` | Start a new project — stack selection, folder structure, architecture rules, build order |
+
+### Architecture & design
+| Skill | Description |
+|-------|-------------|
 | `layered-architecture` | Service/transport/domain layer separation |
 | `api-design` | RESTful URLs, HTTP verbs, error response shape |
 
@@ -40,7 +47,7 @@ Claude Code will pick them up automatically on any project.
 ### AI & prompts
 | Skill | Description |
 |-------|-------------|
-| `ai-api-integration` | Claude API service pattern, structured JSON responses |
+| `ai-api-integration` | AI API service pattern, structured JSON responses |
 | `prompt-engineering` | Multi-layer prompt architecture, VAR substitution, versioning |
 | `analytics-design` | Response tracking, feedback models, copy tracking patterns |
 

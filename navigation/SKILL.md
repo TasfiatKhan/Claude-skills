@@ -5,7 +5,7 @@ description: Set up or audit React Navigation — stack navigators, auth flow ga
 
 You are setting up or auditing React Navigation in a React Native app.
 
-## Stack structure (Witly reference)
+## Stack structure
 
 ```
 AppNavigator
@@ -14,12 +14,10 @@ AppNavigator
   │     └── Register
   └── MainNavigator (if authenticated)
         ├── Home
-        ├── TextingMode
-        ├── LiveMode
-        ├── MomentsScreen
-        ├── MomentDetail
-        ├── PersonalitySetup
-        └── SavedResponses
+        ├── Dashboard
+        ├── DetailView
+        ├── Settings
+        └── [feature screens...]
 ```
 
 ## Type definitions
@@ -33,12 +31,9 @@ export type AuthStackParamList = {
 
 export type MainStackParamList = {
   Home: undefined
-  TextingMode: undefined
-  LiveMode: undefined
-  MomentsScreen: undefined
-  MomentDetail: { momentId: number | null }
-  PersonalitySetup: undefined
-  SavedResponses: undefined
+  Dashboard: undefined
+  DetailView: { itemId: number | null }
+  Settings: undefined
 }
 ```
 
@@ -95,8 +90,8 @@ setIsAuthenticated(false)  // → AppNavigator re-renders → Auth stack shown
 const { profile, isLoading } = useProfile()
 
 useEffect(() => {
-  if (!isLoading && profile && !profile.is_onboarding_complete) {
-    navigation.replace('PersonalitySetup')  // replace — not push, so back button doesn't return here
+  if (!isLoading && profile && !profile.is_setup_complete) {
+    navigation.replace('Setup')  // replace — not push, so back button doesn't return here
   }
 }, [profile, isLoading])
 ```
@@ -109,13 +104,13 @@ type Props = NativeStackScreenProps<MainStackParamList, 'Home'>
 
 export default function HomeScreen({ navigation }: Props) {
   // Navigate to screen with no params
-  navigation.navigate('TextingMode')
+  navigation.navigate('Dashboard')
 
   // Navigate with params
-  navigation.navigate('MomentDetail', { momentId: 42 })
+  navigation.navigate('DetailView', { itemId: 42 })
 
   // Replace current screen (no back button)
-  navigation.replace('PersonalitySetup')
+  navigation.replace('Setup')
 
   // Go back
   navigation.goBack()
@@ -125,10 +120,10 @@ export default function HomeScreen({ navigation }: Props) {
 ## Accessing route params
 
 ```tsx
-type Props = NativeStackScreenProps<MainStackParamList, 'MomentDetail'>
+type Props = NativeStackScreenProps<MainStackParamList, 'DetailView'>
 
-export default function MomentDetailScreen({ navigation, route }: Props) {
-  const { momentId } = route.params   // typed — momentId: number | null
+export default function DetailScreen({ navigation, route }: Props) {
+  const { itemId } = route.params   // typed — itemId: number | null
 }
 ```
 
@@ -150,11 +145,11 @@ useFocusEffect(
   useCallback(() => {
     // Runs every time this screen comes into focus
     async function fetchData() {
-      const data = await momentsService.listMoments(false)
-      setMoments(data)
+      const data = await itemService.listItems()
+      setItems(data)
     }
     fetchData()
-  }, [showArchived])   // re-runs when dependency changes
+  }, [dep])   // re-runs when dependency changes
 )
 ```
 

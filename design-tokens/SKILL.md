@@ -16,7 +16,7 @@ src/theme.ts
   shadow       — card shadow definitions
 ```
 
-## Complete theme.ts (Witly reference)
+## Complete theme.ts
 
 ```typescript
 // src/theme.ts
@@ -27,7 +27,7 @@ export const lightColors = {
   background:      '#FAFAF8',
   surface:         '#FFFFFF',
   surfaceSecondary:'#F2EDE6',
-  border:          'rgba(139,100,65,0.15)',
+  border:          'rgba(0,0,0,0.08)',
 
   accent:          '#C4956A',
   accentLight:     'rgba(196,149,106,0.12)',
@@ -37,6 +37,7 @@ export const lightColors = {
   textMuted:       '#9A8070',
   placeholder:     '#C4B09A',
 
+  // Option type colors — customize to your product
   safe:            '#3A7050',
   safeLight:       'rgba(58,112,80,0.12)',
   playful:         '#5B4E9A',
@@ -46,10 +47,9 @@ export const lightColors = {
 
   error:           '#C0392B',
   success:         '#27AE60',
-  copied:          '#27AE60',
 
   tabBar:          '#FFFFFF',
-  tabBarBorder:    'rgba(139,100,65,0.12)',
+  tabBarBorder:    'rgba(0,0,0,0.06)',
   tabBarActive:    '#C4956A',
   tabBarInactive:  '#9A8070',
 }
@@ -77,7 +77,6 @@ export const darkColors: AppColors = {
 
   error:           '#E74C3C',
   success:         '#2ECC71',
-  copied:          '#2ECC71',
 
   tabBar:          '#1E1E1E',
   tabBarBorder:    'rgba(255,255,255,0.08)',
@@ -127,7 +126,7 @@ export const radii = {
 
 export const shadow = {
   card: {
-    shadowColor:   '#8B6441',
+    shadowColor:   '#000000',
     shadowOffset:  { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius:  8,
@@ -143,6 +142,8 @@ export const shadow = {
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import * as SecureStore from 'expo-secure-store'
 import { lightColors, darkColors, AppColors } from '../theme'
+
+const THEME_KEY = '<app>_theme'
 
 interface ThemeContextValue {
   colors: AppColors
@@ -160,7 +161,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDark, setIsDark] = useState(false)
 
   useEffect(() => {
-    SecureStore.getItemAsync('witly_theme').then(v => {
+    SecureStore.getItemAsync(THEME_KEY).then(v => {
       if (v === 'dark') setIsDark(true)
     })
   }, [])
@@ -168,7 +169,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const toggleTheme = useCallback(() => {
     setIsDark(prev => {
       const next = !prev
-      SecureStore.setItemAsync('witly_theme', next ? 'dark' : 'light')
+      SecureStore.setItemAsync(THEME_KEY, next ? 'dark' : 'light')
       return next
     })
   }, [])
@@ -231,10 +232,10 @@ export default function HomeScreen() {
 }
 ```
 
-## Option colors — mapping type to token
+## Mapping a type label to a color pair
 
 ```typescript
-// In any screen that shows AI options
+// In any screen that maps a label (safe/playful/bold or similar) to colors
 const OPTION_COLORS = {
   safe:    { bg: colors.safeLight,    label: colors.safe    },
   playful: { bg: colors.playfulLight, label: colors.playful },
@@ -256,7 +257,7 @@ Without explicit props, inputs may be invisible in dark mode:
 <TextInput
   style={{ color: colors.text, backgroundColor: colors.surface }}
   placeholderTextColor={colors.placeholder}
-  placeholder="What's the situation?"
+  placeholder="Enter something..."
 />
 ```
 

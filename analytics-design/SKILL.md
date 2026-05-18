@@ -17,16 +17,16 @@ Before writing any code, ask:
 - What would tell us something is broken or unpopular?
 - Who needs to see this data — developer only, or user-facing too?
 
-## Witly reference implementation
+## Reference implementation (AI-powered app)
 
 ### Models
 
-**AIResponseRecord** — every AI response generated
+**ResponseRecord** — every AI response generated
 ```python
-class AIResponseRecord(models.Model):
+class ResponseRecord(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    mode = models.CharField(max_length=20)                # texting / live / moments
-    relationship_context = models.CharField(max_length=50, blank=True)
+    mode = models.CharField(max_length=20)                # feature mode name
+    context_type = models.CharField(max_length=50, blank=True)
     situation_summary = models.TextField(blank=True)
     response_json = models.JSONField()                    # full structured response
     prompt_version = models.CharField(max_length=10)      # 'v2', 'v3' — compare quality
@@ -34,13 +34,13 @@ class AIResponseRecord(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 ```
 
-**ResponseFeedback** — per-user reaction to a response
+**UserFeedback** — per-user reaction to a response
 ```python
-class ResponseFeedback(models.Model):
-    FEEDBACK_TYPES = ['natural', 'loved', 'cringe', 'risky']
+class UserFeedback(models.Model):
+    FEEDBACK_TYPES = ['positive', 'negative', 'saved', 'flagged']
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    response_record = models.ForeignKey(AIResponseRecord, on_delete=models.CASCADE)
+    response_record = models.ForeignKey(ResponseRecord, on_delete=models.CASCADE)
     feedback_type = models.CharField(max_length=20)
 
     class Meta:
@@ -49,21 +49,21 @@ class ResponseFeedback(models.Model):
 
 Undoable: same type → delete (undo). Different type → delete old, create new (replace).
 
-**SavedResponse** — user explicitly saved an option
+**SavedItem** — user explicitly saved an option
 ```python
-class SavedResponse(models.Model):
+class SavedItem(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    response_record = models.ForeignKey(AIResponseRecord, on_delete=models.CASCADE)
-    option_type = models.CharField(max_length=20)   # safe / playful / bold
+    response_record = models.ForeignKey(ResponseRecord, on_delete=models.CASCADE)
+    option_type = models.CharField(max_length=20)
     option_text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 ```
 
-**CopiedResponse** — user copied an option to clipboard
+**CopyEvent** — user copied an option to clipboard
 ```python
-class CopiedResponse(models.Model):
+class CopyEvent(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    response_record = models.ForeignKey(AIResponseRecord, on_delete=models.CASCADE)
+    response_record = models.ForeignKey(ResponseRecord, on_delete=models.CASCADE)
     option_type = models.CharField(max_length=20)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -77,17 +77,16 @@ Use `get_or_create` when logging — deduped, silent if already tracked.
 
 | Question | How to answer |
 |----------|--------------|
-| Which option type gets used most? | Count CopiedResponse + SavedResponse by option_type |
-| Which mode has the most cringe responses? | ResponseFeedback filtered by mode via response_record |
+| Which option type gets used most? | Count CopyEvent + SavedItem by option_type |
+| Which mode has the most negative feedback? | UserFeedback filtered by mode via response_record |
 | Does prompt v3 outperform v2? | Compare feedback distribution grouped by prompt_version |
-| What relationship contexts are most common? | Count AIResponseRecord by relationship_context |
-| Which users are most engaged? | Count AIResponseRecord + CopiedResponse by user |
-| Are Moments threads being completed? | Count MomentMessage per Moment, look at archive rate |
+| What context types are most common? | Count ResponseRecord by context_type |
+| Which users are most engaged? | Count ResponseRecord + CopyEvent by user |
 
 ## General patterns
 
 ### Always worth logging
-- Every AI response — with enough context to reproduce it (mode, relationship, situation)
+- Every AI response — with enough context to reproduce it (mode, context, situation)
 - Explicit user feedback (labels, ratings) — high-signal, user chose to give it
 - Save / bookmark — high-intent signal (they want to reference it later)
 - Copy to clipboard — intent to use signal (they're about to send it)
@@ -111,10 +110,10 @@ Use `get_or_create` when logging — deduped, silent if already tracked.
 
 ```python
 # After every successful AI response
-record = AIResponseRecord.objects.create(
+record = ResponseRecord.objects.create(
     user=request.user,
-    mode='texting',
-    relationship_context=data.get('relationship_context', ''),
+    mode='mode_name',
+    context_type=data.get('context_type', ''),
     situation_summary=data.get('user_request', '')[:500],
     response_json=response,
     prompt_version='v2',
@@ -131,7 +130,7 @@ Always return `record_id` to the frontend — it's needed to attach feedback, sa
 // Fire-and-forget — never block the user on an analytics call
 const trackCopy = async (recordId: number, optionType: string) => {
   try {
-    await responsesService.trackCopy(recordId, optionType)
+    await analyticsService.trackCopy(recordId, optionType)
   } catch {
     // silent — analytics failure should never affect UX
   }
@@ -142,7 +141,7 @@ const trackCopy = async (recordId: number, optionType: string) => {
 
 1. **Start with raw DB queries** — before building a dashboard, verify the data is actually being captured correctly by querying the DB directly
 2. **Admin view first** — Django admin with `list_display`, `list_filter`, `search_fields` gives you a usable interface immediately
-3. **Aggregate on read, not write** — don't maintain running totals in the model (except `feedback_counts` for fast display). Query and aggregate when you need the number.
+3. **Aggregate on read, not write** — don't maintain running totals in the model (except quick-display tallies). Query and aggregate when you need the number.
 4. **User-facing stats last** — only build a "your stats" screen once you've validated users actually want it
 
 ## Common mistakes
