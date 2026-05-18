@@ -71,3 +71,4 @@ Claude Code will pick them up automatically on any project.
 | `commit-and-push` | Commit pattern with Co-Authored-By, staged by name |
 | `update-claude-md` | Append-only progress log, matches existing tone |
 | `readme` | Developer-focused README from CLAUDE.md |
+| `skill-manager` | Audit, update, retire, and create skills after each project |
