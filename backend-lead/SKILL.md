@@ -84,11 +84,72 @@ GET    /api/<resource>/{id}/      retrieve
 PATCH  /api/<resource>/{id}/      partial update
 DELETE /api/<resource>/{id}/      delete
 
+POST   /api/<resource>/{id}/continue/   sub-action on a resource
+PATCH  /api/<resource>/{id}/archive/    sub-action (toggle)
+
 POST   /api/auth/register/
 POST   /api/auth/token/
 POST   /api/auth/token/refresh/
 
 GET    /api/<resource>/me/        always /me/ for own-user resource, never /{id}/
+```
+
+Rules: plural nouns for collections (`/moments/` not `/moment/`), always trailing slash in Django, never verbs in URLs (`/getMoments/` → `GET /moments/`), nest sub-actions under the resource.
+
+### HTTP verbs
+
+| Verb | Use | Idempotent |
+|------|-----|-----------|
+| `GET` | Read, never mutate | Yes |
+| `POST` | Create or non-idempotent action | No |
+| `PATCH` | Partial update | Yes |
+| `PUT` | Full replace | Yes |
+| `DELETE` | Remove | Yes |
+
+### Status codes
+
+```python
+return Response(serializer.data, status=status.HTTP_201_CREATED)   # create
+return Response(serializer.data, status=status.HTTP_200_OK)         # read/update
+return Response(status=status.HTTP_204_NO_CONTENT)                  # delete
+# DRF handles 400 automatically with raise_exception=True on is_valid()
+# DRF handles 401 via IsAuthenticated permission class
+return Response({'detail': '...'}, status=status.HTTP_403_FORBIDDEN) # authenticated but forbidden
+return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+```
+
+### Request validation (DRF serializers)
+
+```python
+class ResourceSerializer(serializers.Serializer):
+    text  = serializers.CharField(allow_blank=True, default='')
+    audio = serializers.FileField(required=False)
+
+    def validate(self, attrs):
+        if not attrs.get('text') and not attrs.get('audio'):
+            raise serializers.ValidationError('Provide either text or audio.')
+        return attrs
+```
+
+Rules: field-level validation in `validate_<field>`, cross-field in `validate`. Always `raise_exception=True` on `is_valid()` — let DRF return 400 automatically. Never validate in views.
+
+### Response shapes
+
+```python
+# List
+[{ "id": 1, "title": "...", "created_at": "..." }, ...]
+
+# Single resource / create (return the full resource, not just id)
+{ "id": 5, "title": "...", "created_at": "..." }
+
+# Delete
+204 No Content
+
+# Action (toggle)
+{ "is_archived": true }
+
+# AI response
+{ "record_id": 42, "options": [...], "delivery": "..." }
 ```
 
 ### Consistent error shape
@@ -97,6 +158,8 @@ Pick one shape and never deviate:
 ```json
 { "error": "Human-readable message", "field": "field_name_if_applicable" }
 ```
+
+For business logic errors (not validation): `{ "detail": "You have reached the 5 active cap." }` — always `detail` for non-field errors, never `error`, `message`, or `msg`.
 
 ### File upload endpoints
 
@@ -163,7 +226,7 @@ Every backend you design must answer these:
 
 ## Service layer decisions
 
-Read [[layered-architecture]] before defining any service.
+Apply the three-layer model (transport → business logic → service) before defining any service. See the Code Layer Structure section in `architect` for details.
 
 Key decisions:
 - **One service class per domain** — not one giant `utils.py`
@@ -179,7 +242,7 @@ Key decisions:
 |------|-------|
 | Setting up JWT auth end-to-end | `jwt-auth` |
 | Designing the database schema | `postgresql` |
-| Setting up the service layer | `layered-architecture` |
+| Setting up the service layer | `architect` (Code Layer Structure section) |
 | Integrating an AI API | `ai-api-integration` |
 | Setting up Redis caching | `redis` |
 | Writing prompt templates | `prompt-engineering` |

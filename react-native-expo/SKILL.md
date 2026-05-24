@@ -136,3 +136,143 @@ npx expo run:ios            # build and run on iOS (Mac only)
 npx expo prebuild           # generate native projects after adding native modules
 cd ios && pod install        # install iOS native deps after prebuild
 ```
+
+---
+
+## Navigation (React Navigation)
+
+### Stack structure
+
+```
+AppNavigator (NavigationContainer)
+  ├── AuthNavigator (if not authenticated)
+  │     ├── Login
+  │     └── Register
+  └── MainNavigator (if authenticated)
+        ├── Home
+        ├── Dashboard
+        ├── DetailView
+        ├── Settings
+        └── [feature screens...]
+```
+
+### Type definitions
+
+```typescript
+// src/navigation/types.ts
+export type AuthStackParamList = {
+  Login:    undefined
+  Register: undefined
+}
+
+export type MainStackParamList = {
+  Home:       undefined
+  Dashboard:  undefined
+  DetailView: { itemId: number | null }
+  Settings:   undefined
+}
+```
+
+### Navigator setup
+
+```tsx
+// src/navigation/AppNavigator.tsx
+import { NavigationContainer } from '@react-navigation/native'
+import { createNativeStackNavigator } from '@react-navigation/native-stack'
+import { useAuth } from '../context/AuthContext'
+
+const Stack = createNativeStackNavigator()
+
+export default function AppNavigator() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) return <LoadingScreen />
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isAuthenticated
+          ? <Stack.Screen name="Main" component={MainNavigator} />
+          : <Stack.Screen name="Auth" component={AuthNavigator} />}
+      </Stack.Navigator>
+    </NavigationContainer>
+  )
+}
+```
+
+### Auth flow gating
+
+The navigator conditionally renders Auth vs Main based on `isAuthenticated`. When auth state changes (login/logout), React Navigation switches automatically — no `navigate()` call needed.
+
+```tsx
+// After login — just update state, navigator handles the switch
+await SecureStore.setItemAsync(ACCESS_KEY, tokens.access)
+setIsAuthenticated(true)   // → AppNavigator re-renders → Main stack shown
+
+// After logout
+await SecureStore.deleteItemAsync(ACCESS_KEY)
+setIsAuthenticated(false)  // → Auth stack shown
+```
+
+### Onboarding gate (within Main)
+
+```tsx
+// HomeScreen — redirect to setup if not onboarded
+const { profile, isLoading } = useProfile()
+
+useEffect(() => {
+  if (!isLoading && profile && !profile.is_setup_complete) {
+    navigation.replace('Setup')  // replace — not push, so back button doesn't return here
+  }
+}, [profile, isLoading])
+```
+
+### Navigating between screens
+
+```tsx
+// Type-safe navigation
+type Props = NativeStackScreenProps<MainStackParamList, 'Home'>
+
+export default function HomeScreen({ navigation }: Props) {
+  navigation.navigate('Dashboard')              // go forward
+  navigation.navigate('DetailView', { itemId: 42 })  // with params
+  navigation.replace('Setup')                  // no back button
+  navigation.goBack()                          // go back
+}
+```
+
+### Accessing route params
+
+```tsx
+type Props = NativeStackScreenProps<MainStackParamList, 'DetailView'>
+
+export default function DetailScreen({ navigation, route }: Props) {
+  const { itemId } = route.params  // typed — itemId: number | null
+}
+```
+
+### useFocusEffect — reload data on screen focus
+
+```tsx
+import { useFocusEffect } from '@react-navigation/native'
+
+useFocusEffect(
+  useCallback(() => {
+    async function fetchData() {
+      const data = await itemService.listItems()
+      setItems(data)
+    }
+    fetchData()
+  }, [dep])
+)
+```
+
+Never pass async directly to `useFocusEffect` — define `async function` inside and call it.
+
+### Navigation common mistakes
+
+- `navigation.navigate` in the wrong navigator — each navigator only knows its own screens
+- Passing async to `useFocusEffect` directly — inner async function pattern only
+- `navigate` instead of `replace` for onboarding gates — user can press back to escape
+- Missing `headerShown: false` — double header appears when nesting navigators
+- Forgetting to add new screens to `ParamList` types — TypeScript won't catch invalid screen names

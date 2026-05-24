@@ -113,6 +113,37 @@ These are non-negotiable decisions that prevent the biggest classes of bugs:
 
 ---
 
+## Code layer structure
+
+Each layer has one job. No layer reaches past its neighbor.
+
+```
+Transport layer       — HTTP, WebSocket, CLI, React Native screens
+    ↓
+Business logic layer  — what the app does, rules, orchestration
+    ↓
+Service layer         — external calls: AI API, DB, cache, email, storage
+```
+
+**Transport layer** (views, screens, routes) — receives requests, validates input shape, returns responses. Knows HTTP status codes and request/response format. Does NOT contain business logic or direct external calls.
+
+**Business logic layer** (services, use cases) — orchestrates what happens, enforces rules: caps, permissions, rate limits, state transitions. Does NOT know about HTTP or UI.
+
+**Service layer** (external integrations) — thin wrappers around external systems: AI API, email, storage, Redis. No business rules — just "call this, return that." Swappable: changing AI providers touches only this layer.
+
+### Audit violations to look for
+- API calls (`axios`, `fetch`, AI client) inside screens or views → move to services
+- Business rules (caps, permissions, state checks) inside views → move to a service
+- HTTP concepts (`request.data`, status codes) inside service files → move to views
+- Duplicated logic across views → extract to a shared service
+
+### Signs the architecture is clean
+- Business logic can be tested without spinning up HTTP
+- Swapping an external provider touches exactly one file
+- Views are thin — mostly validation + one service call + return response
+
+---
+
 ## API design defaults
 
 ```

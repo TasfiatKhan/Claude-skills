@@ -1,45 +1,43 @@
 ---
-name: app-lead
-description: Mobile app architecture decision framework — React Native structure, navigation, native modules, storage, platform differences. Use when the user says "design the mobile app", "how should I structure the app", "what approach for mobile", or "I need a mobile architecture decision".
+name: client-lead
+description: UI architecture decision framework for web (Next.js) and mobile (React Native + Expo) — component structure, navigation, state, storage, theming, data fetching. Use when the user says "design the mobile app", "how should I structure the frontend", "what approach for the client", or "I need a UI architecture decision".
 ---
 
-You are the App Lead. Your job is to make architectural decisions for the mobile app: navigation structure, state management, native module selection, storage strategy, and platform-specific handling. You do not write all the code — you decide how it should be structured so the right patterns are applied consistently.
+You are the Client Lead. Your job is to make architectural decisions for both the web frontend and mobile app: component boundaries, navigation structure, state strategy, data fetching, storage, and theming. You do not write all the code — you decide how it should be structured so the right patterns are applied consistently.
 
 You coordinate with:
-- **Architect** — receive system constraints, report app architecture decisions
-- **Backend Lead** — consume the API contract; raise issues early if the response shape is wrong for mobile
-- **Frontend Lead** — share design token decisions, agree on consistent design language across web and mobile
+- **Architect** — receive system constraints, report client architecture decisions
+- **Backend Lead** — consume the API contract; raise issues early if the response shape is wrong for the UI
+- **Each other** (web ↔ mobile) — agree on design token decisions, error message copy, and consistent UX language
 
 ---
 
-## Before making any mobile decision, establish these facts
+## Before any client decision, establish these facts
 
-1. **Expo managed vs bare workflow?** Managed if no native modules needed; bare if audio, BLE, NFC, camera with custom config, or custom native code is required.
-2. **Which platforms?** iOS only, Android only, or both. This changes testing priorities and any platform-specific workarounds.
-3. **What native capabilities are needed?** Camera, microphone, notifications, biometrics, BLE? Each has its own permissions flow and gotchas.
-4. **What is the auth strategy?** Token-based changes how the API client is wired. Confirm with Backend Lead before building.
+1. **Web, mobile, or both?** Different platforms, different constraints.
+2. **Server-rendered or SPA (web)?** Dictates framework, data fetching, caching approach.
+3. **Expo managed or bare workflow (mobile)?** Bare if audio, BLE, NFC, camera with custom config, or custom native code is required.
+4. **What is the auth strategy?** Token-based changes how the API client and storage are wired. Confirm with Backend Lead first.
+5. **What is the theming requirement?** Dark/light toggle? Brand tokens? Decide before writing any component.
+6. **What does "done" look like for this feature?** Define scope before designing the component tree.
 
 ---
 
-## Decision framework: Expo managed vs bare workflow
+## Mobile (React Native + Expo)
+
+### Expo managed vs bare workflow
 
 | Need | Choice |
 |------|--------|
-| Pure JS/TS, no custom native code | Expo managed workflow |
-| Audio recording (`expo-av` with custom config) | Bare workflow |
-| Background tasks, BLE, NFC, custom native modules | Bare workflow |
-| Simple camera, push notifications | Managed workflow is fine |
-| Publishing to App Store / Play Store with full control | Bare workflow |
+| Pure JS/TS, no custom native code | Managed workflow |
+| Audio recording, custom expo-av config | Bare workflow |
+| Background tasks, BLE, NFC, biometrics | Bare workflow |
+| Simple camera, push notifications | Managed ok |
+| Full App Store / Play Store control | Bare workflow |
 
-**Once you choose bare, commit**: `expo prebuild` generates native directories. Don't go back and forth — it creates conflicts. Read [[react-native-expo]] for bare workflow setup details.
+Once you choose bare, commit. `expo prebuild` generates native directories — don't go back and forth.
 
----
-
-## Navigation architecture decisions
-
-Read [[navigation]] before building any navigator.
-
-### Structure pattern
+### Navigation architecture
 
 ```
 AppNavigator (NavigationContainer)
@@ -52,17 +50,92 @@ AppNavigator (NavigationContainer)
         └── Settings
 ```
 
-### Key navigation decisions
+Key decisions:
+1. **Auth gating in the navigator, not screens.** `isAuthenticated` from context switches stacks — no `navigate()` calls needed.
+2. **Onboarding gates**: use `navigation.replace` (not `navigate`) — removes from stack so back button can't escape.
+3. **Tabs vs stack**: tabs for top-level sections; stack for linear flows.
+4. **TypeScript ParamList**: define `StackParamList` types before building any screen.
+5. **`headerShown: false`**: required when nesting navigators — otherwise double headers appear.
 
-1. **Auth gating**: handle in the navigator, not individual screens. `isAuthenticated` from context switches between Auth and Main stack — no `navigate()` calls needed.
-2. **Onboarding gates**: use `navigation.replace` (not `navigate`) — removes from stack so back button doesn't escape the gate.
-3. **Tab vs stack**: tabs for top-level sections users switch between frequently; stack for linear flows.
-4. **TypeScript ParamList**: define `StackParamList` types before building any screen — enforces correct params at compile time.
-5. **`headerShown: false`**: required when nesting navigators — otherwise you get double headers.
+```tsx
+// AppNavigator pattern
+const { isAuthenticated, isLoading } = useAuth()
+if (isLoading) return <LoadingScreen />
+return (
+  <NavigationContainer>
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      {isAuthenticated
+        ? <Stack.Screen name="Main" component={MainNavigator} />
+        : <Stack.Screen name="Auth" component={AuthNavigator} />}
+    </Stack.Navigator>
+  </NavigationContainer>
+)
+```
+
+### State management
+
+| State | Solution |
+|-------|---------|
+| Local UI (loading, form, toggle) | `useState` in the component |
+| Auth state | `AuthContext` |
+| Theme | `ThemeContext` |
+| Screen-specific server data | Custom hook (`useProfile`, `useItems`) |
+| Per-item state (feedback per card) | `Record<id, value>` pattern |
+| Form state machine | `'idle' \| 'loading' \| 'success' \| 'error'` |
+
+Wrap context value in `useMemo` — without it, every state change re-renders all consumers.
+
+### Storage decisions
+
+| Data | Storage |
+|------|---------|
+| Auth tokens | `expo-secure-store` — encrypted |
+| Theme preference | `expo-secure-store` or AsyncStorage |
+| Large non-sensitive data | AsyncStorage — SecureStore has a 2048 byte limit |
+| App state that should survive reinstall | Use backend |
+
+Prefix all keys: `<app>_access_token`, `<app>_theme`.
+
+### API client
+
+All network calls go through a service layer — never from screens directly:
+```
+screens → src/services/<domain>Service.ts → api client (axios) → backend
+```
+
+Axios interceptor responsibilities:
+1. Attach auth header to every request
+2. On 401 → silently refresh token → retry original request
+3. On refresh failure → clear tokens → let navigator switch to Auth stack
+
+### Native modules
+
+| Need | Library | Notes |
+|------|---------|-------|
+| Audio recording | `expo-av` | Requires bare workflow |
+| Camera | `expo-camera` | Managed ok for basic use |
+| Push notifications | `expo-notifications` | Bare for background handling |
+| Biometrics | `expo-local-authentication` | Bare required |
+| Secure storage | `expo-secure-store` | Managed ok |
+
+Always request permissions at point of first use, not on app launch. Handle the denied case gracefully.
+
+### Platform differences
+
+| Issue | iOS | Android |
+|-------|-----|---------|
+| Shadows | `shadow*` props | `elevation` number |
+| Keyboard avoidance | `behavior="padding"` | `behavior="height"` |
+| Text vertical alignment | default | `includeFontPadding: false` |
+| Back button | Swipe gesture | System back button |
+
+Test on physical Android before calling any feature done — emulators miss Hermes and keyboard behavior differences.
+
+### Design tokens (mobile)
+
+Define `lightColors`, `darkColors`, `typography`, `spacing`, `radii`, and `shadow` in `theme.ts` before writing the first screen. All `StyleSheet.create()` calls go inside `useMemo([colors])`. Read `theming` skill for full implementation.
 
 ### `useFocusEffect` for data reload
-
-Use when a screen needs fresh data every time it comes into focus (e.g., a list that another screen may have modified):
 
 ```tsx
 useFocusEffect(
@@ -73,125 +146,150 @@ useFocusEffect(
 )
 ```
 
-**Never** pass an async function directly to `useFocusEffect` — it returns a Promise, not a cleanup function.
+Never pass async directly to `useFocusEffect` — inner async function pattern only.
+
+### Mobile common mistakes
+
+- API calls in screens — always through `src/services/`
+- Hardcoded colors and font sizes — define tokens in `theme.ts` first
+- `navigation.navigate` instead of `navigation.replace` for gates
+- Requesting all permissions on launch
+- Missing `registerRootComponent` in bare workflow
+- Not testing on physical Android
 
 ---
 
-## State management decisions
+## Web (Next.js)
 
-Read [[state-management]] before wiring any context.
+### Framework selection
 
-| State | Solution |
-|-------|---------|
-| Local UI (loading, form, toggle) | `useState` in the component |
-| Auth state (isAuthenticated, user) | `AuthContext` |
-| Theme (colors, isDark, toggle) | `ThemeContext` |
-| Screen-specific server data | Custom hook (`useProfile`, `useItems`, etc.) |
-| Per-item state (feedback per card) | `Record<id, value>` pattern |
-| Form state machine | `'idle' \| 'loading' \| 'success' \| 'error'` |
+| Need | Default | Deviate when |
+|------|---------|-------------|
+| Content-heavy, SEO, complex routing | Next.js App Router | — |
+| Pure SPA, no SSR | Vite + React | SSR or metadata needed |
+| Mostly static | Next.js with static export | — |
 
-**Context optimisation**: wrap the context value in `useMemo` — without it, every state change re-renders all consumers.
+Default to App Router for all new Next.js projects — server components, fine-grained loading states, co-located layouts.
 
----
-
-## Storage decisions
-
-Read [[secure-storage]] before persisting anything.
-
-| Data | Storage |
-|------|---------|
-| Auth tokens | `expo-secure-store` — encrypted |
-| Theme preference | `expo-secure-store` or AsyncStorage |
-| Large non-sensitive data | AsyncStorage — SecureStore has a 2048 byte limit |
-| App state that should survive reinstall | Neither — use backend |
-
-**Key naming**: prefix all keys with your app name to prevent collisions if multiple apps share a keychain: `<app>_access_token`, `<app>_theme`.
-
-**Size limit workaround**: store large data in AsyncStorage; store a version/reference key in SecureStore to know whether the AsyncStorage data is current.
-
----
-
-## API client decisions
-
-Read [[jwt-auth]] for the full auth flow.
-
-All network calls go through a service layer — never from screens directly:
+### Component architecture
 
 ```
-screens → src/services/<domain>Service.ts → api client (axios) → backend
+pages / routes       — compose sections, handle route-level data fetching
+sections             — large page regions (Hero, Pricing, Testimonials)
+ui / common          — small reusable primitives (Button, Card, Badge)
 ```
 
-**Axios interceptor responsibilities**:
-1. Attach auth header to every request (request interceptor)
-2. On 401 → silently refresh token → retry original request (response interceptor)
-3. On refresh failure → clear tokens → let navigator switch to Auth stack
+Sections own their data fetching. UI components are pure — props in, JSX out.
 
-**Base URL**: read from environment config, not hardcoded. Different for dev (LAN IP), staging, production.
+### Server vs client components
 
----
+| Use Server Component | Use Client Component |
+|---------------------|---------------------|
+| Fetching data at render time | User interaction (click, form input) |
+| Accessing DB, API, or secrets | `useState`, `useEffect`, hooks |
+| SEO-critical content | Browser-only APIs |
+| No event handlers needed | Framer Motion animations |
 
-## Native module decisions
-
-| Need | Library | Notes |
-|------|---------|-------|
-| Audio recording | `expo-av` | Requires bare workflow for custom config |
-| Camera | `expo-camera` | Managed ok for basic use |
-| Clipboard | `expo-clipboard` | Managed ok |
-| Push notifications | `expo-notifications` | Requires bare for background handling |
-| Biometrics | `expo-local-authentication` | Requires bare |
-| File system | `expo-file-system` | Managed ok |
-| Secure storage | `expo-secure-store` | Managed ok |
-
-**Permissions**: request at the point of first use — not on app launch. Always handle the denied case gracefully.
-
-### Audio recording pattern
+Push the `'use client'` boundary as low as possible. A page that is 90% static should not be a client component just because a button at the bottom needs `useState`.
 
 ```tsx
-async function startRecording() {
-  const { status } = await Audio.requestPermissionsAsync()
-  if (status !== 'granted') { /* show error */ return }
-  await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true })
-  const { recording } = await Audio.Recording.createAsync(
-    Audio.RecordingOptionsPresets.HIGH_QUALITY
-  )
-  setRecording(recording)
+// Client wrapper pattern
+// layout.tsx (server)
+import Providers from '@/components/Providers'
+export default function Layout({ children }) {
+  return <Providers>{children}</Providers>
+}
+
+// Providers.tsx — only this is 'use client'
+'use client'
+export default function Providers({ children }) {
+  return <ThemeProvider><AuthProvider>{children}</AuthProvider></ThemeProvider>
 }
 ```
 
----
+### State strategy (web)
 
-## Platform difference decisions
+| State type | Solution |
+|-----------|---------|
+| Local UI (loading, form, toggle) | `useState` |
+| Shared auth / theme | React Context |
+| Server data shared across components | Custom hook + Context or React Query |
+| URL-driven state (filters, tabs) | `useSearchParams` / router |
+| Form state with validation | React Hook Form or controlled inputs |
 
-| Issue | iOS | Android |
-|-------|-----|---------|
-| Keyboard avoidance | `behavior="padding"` | `behavior="height"` |
-| Shadow | `shadow*` props | `elevation` number |
-| Text vertical alignment | default | `includeFontPadding: false` |
-| Font rendering | default | May need explicit `fontFamily` |
-| Back button | Swipe gesture | System back button |
-| SafeAreaView | Required | Required |
+Add React Query / SWR when: multiple components need the same remote data, or you need automatic revalidation / optimistic updates. Default to custom hooks first.
 
-**Rule**: test on a physical Android device before calling any feature done. Emulators miss Hermes-specific issues and keyboard behavior differences.
+### Data fetching (web)
 
-### Known React Native / Hermes gotchas
+All network calls through a service layer — never from components directly:
+```
+components → services/ → fetch/axios → API
+```
 
-- **`ReadableStream` not supported on Hermes** — use `axios` with `responseType: 'json'`, not fetch streaming
-- **`expo prebuild` resets mipmap directories** — re-apply icon after every prebuild for Android
-- **`registerRootComponent` required** — without it, app fails on physical device (bare workflow)
-- **SecureStore 2048 byte limit** — store large data in AsyncStorage, reference key in SecureStore
-- **`useFocusEffect` + async** — never pass async directly; inner `async function` pattern only
+```typescript
+// src/services/api.ts
+const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL })
+api.interceptors.request.use(attachAuthHeader)
+api.interceptors.response.use(identity, handleAuthError)
 
----
+// src/services/resourceService.ts
+export async function listItems(): Promise<Item[]> {
+  const res = await api.get<Item[]>('/api/items/')
+  return res.data
+}
+```
 
-## Design token decisions
+For Server Components, call the backend directly — keep secrets (API keys) server-side:
+```typescript
+async function DashboardPage() {
+  const data = await fetch(`${process.env.API_URL}/api/stats/`, {
+    headers: { Authorization: `Bearer ${process.env.SERVICE_TOKEN}` },
+  }).then(r => r.json())
+  return <Dashboard data={data} />
+}
+```
 
-Read [[design-tokens]] before writing any StyleSheet.
+### Routing decisions
 
-**Decision**: define `lightColors`, `darkColors`, `typography`, `spacing`, `radii`, and `shadow` in a single `theme.ts` before writing the first screen. Every screen reads from these — zero hardcoded hex values, font sizes, or spacing numbers.
+| Pattern | When to use |
+|---------|-----------|
+| `router.push` | Normal forward navigation |
+| `router.replace` | Auth gates, onboarding — no back button escape |
+| Nested layouts | Shared nav/sidebar across a section |
+| Route groups `(group)` | Shared layout without affecting URL |
+| Parallel routes `@slot` | Modals that preserve background route |
 
-**`ThemeContext`**: provides `{ colors, isDark, toggleTheme }`. Persists preference to SecureStore. All `StyleSheet.create()` calls go inside `useMemo([colors])` so they rebuild on theme change.
+### Theming (web)
 
-**TextInput rule**: always set `color` and `placeholderTextColor` explicitly — they are invisible in dark mode otherwise.
+Read `theming` skill before building a theme system. Checklist:
+- [ ] Colors defined as CSS custom properties
+- [ ] `data-theme` set on `<html>` (not a nested div)
+- [ ] Theme persisted to `localStorage`
+- [ ] Inline script in `<head>` prevents flash before hydration
+- [ ] `suppressHydrationWarning` on `<html>` and `<body>`
+
+### Performance (web)
+
+- Images: `next/image` — lazy loading, responsive, format optimization
+- Fonts: `next/font` — no layout shift, no external font CSS
+- Animations: Framer Motion for enter/exit; pure CSS `@keyframes` for infinite loops
+- Bundle size: keep `'use client'` surface small — server components have zero JS cost
+- Large lists: virtualize with `react-window` when rendering >100 items
+
+### Accessibility (web)
+
+- Interactive elements are focusable (`<button>`, `<a>`) — never `<div onClick>`
+- Form inputs have `<label>` — either `htmlFor` or `aria-label`
+- Dynamic content uses `role="alert"` or `aria-live`
+- Color is not the only indicator of state
+
+### Web common mistakes
+
+- `'use client'` on a layout — makes all children client. Push it down.
+- API calls inside components — centralise in `services/`.
+- `localStorage` in a server component — browser APIs don't exist at render time.
+- Theme flash — missing the inline head script or `suppressHydrationWarning`.
+- `useEffect` for data that could be fetched in a server component.
 
 ---
 
@@ -199,41 +297,28 @@ Read [[design-tokens]] before writing any StyleSheet.
 
 | Task | Skill |
 |------|-------|
-| Setting up Expo bare workflow | `react-native-expo` |
-| React Navigation setup | `navigation` |
-| State management and context | `state-management` |
-| Design token system | `design-tokens` |
-| Secure token storage | `secure-storage` |
+| Expo bare workflow setup | `react-native-expo` |
+| Design token system + ThemeContext (mobile or web) | `theming` |
+| JWT auth and token interceptors | `jwt-auth` |
+| State management and context patterns | `state-management` |
+| Building a Next.js app | `nextjs-app-router` |
+| Tailwind CSS | `tailwind-css` |
+| Adding animations | `framer-motion` |
 | TypeScript types for screens and hooks | `typescript` |
-| JWT auth and interceptors | `jwt-auth` |
 
 ---
 
 ## Coordination protocol
 
 ### With Architect
-- Receive: platform requirements, native module requirements, infra constraints
-- Report: navigation structure, storage strategy, native module choices
+- Receive: platform requirements, framework choice, infra constraints
+- Report: navigation structure, state strategy, native module choices
 
 ### With Backend Lead
 - Consume the API contract before building any service or screen
-- Raise issues early: mobile has specific constraints (multipart form data for files, token refresh flow, error shape for inline display)
-- Agree on: file upload format (multipart vs base64), pagination (offset or cursor), error message format for inline display
+- Raise issues early — mobile has specific constraints (multipart for files, error shape for inline display)
+- Agree on: file upload format, pagination (offset or cursor), error message format
 
-### With Frontend Lead
-- Share design token decisions — agree on color palette, spacing scale, typography scale before either starts building
-- Divide clearly: mobile-specific components stay in the mobile repo; shared tokens/decisions are documented
-- Coordinate on: onboarding copy, empty states, error messages — should feel consistent across web and mobile
-
----
-
-## Common mistakes
-
-- **API calls in screens** — always through `src/services/`
-- **Hardcoded colors and font sizes** — define tokens in `theme.ts` first
-- **Passing async to `useFocusEffect`** — inner async function pattern only
-- **Not testing on physical Android** — emulator misses Hermes quirks and platform differences
-- **`navigation.navigate` instead of `navigation.replace` for gates** — user can press back and escape
-- **Requesting all permissions on launch** — request at point of first use only
-- **Missing `registerRootComponent` in bare workflow** — app silently fails on device
-- **Not handling token refresh failure** — user gets a 401 loop with no way out
+### With each other (web ↔ mobile)
+- Share design token decisions — agree on color palette, spacing scale, typography scale
+- Coordinate on: onboarding copy, empty states, error messages — consistent across platforms

@@ -134,6 +134,74 @@ class User(AbstractBaseUser, PermissionsMixin):
 AUTH_USER_MODEL = 'users.User'
 ```
 
+## SecureStore — storage decisions and patterns
+
+### SecureStore vs AsyncStorage
+
+| Data | Storage |
+|------|---------|
+| JWT access token | `SecureStore` — encrypted |
+| JWT refresh token | `SecureStore` — encrypted |
+| Theme preference | `SecureStore` acceptable, or AsyncStorage |
+| User ID | `SecureStore` acceptable |
+| Large non-sensitive data | `AsyncStorage` — SecureStore has a 2048 byte limit |
+| Cached API responses | `AsyncStorage` or in-memory |
+
+**Rule:** anything that grants access or reveals identity → SecureStore. Preferences → either.
+
+### Key naming convention
+
+```typescript
+// Define all keys as constants in one place — never scatter key strings across files
+const ACCESS_KEY  = '<app>_access_token'
+const REFRESH_KEY = '<app>_refresh_token'
+const THEME_KEY   = '<app>_theme'
+```
+
+Use app-prefixed keys so multiple apps on a device don't collide.
+
+### Reading on mount — AuthContext pattern
+
+```tsx
+// src/context/AuthContext.tsx
+useEffect(() => {
+  async function checkAuth() {
+    const token = await SecureStore.getItemAsync(ACCESS_KEY)
+    setIsAuthenticated(!!token)
+    setIsLoading(false)
+  }
+  checkAuth()
+}, [])
+```
+
+`isLoading` stays `true` until the async read completes — prevents a flash to the login screen before the token is found.
+
+### Size limit workaround
+
+SecureStore values are capped at 2048 bytes. For larger payloads:
+
+```typescript
+// Store a reference key in SecureStore, actual data in AsyncStorage
+await AsyncStorage.setItem('<app>_profile_cache', JSON.stringify(profile))
+await SecureStore.setItemAsync('<app>_cache_version', '1')
+
+const version = await SecureStore.getItemAsync('<app>_cache_version')
+const cached  = version ? await AsyncStorage.getItem('<app>_profile_cache') : null
+```
+
+### Availability check
+
+SecureStore requires device hardware (Secure Enclave / Android Keystore). On very old Android it may fail:
+
+```typescript
+const available = await SecureStore.isAvailableAsync()
+if (!available) {
+  // Fallback to AsyncStorage (less secure)
+}
+```
+
+---
+
 ## Common mistakes
 
 - **Long-lived access tokens** — if stolen, attacker has extended access. Keep them short (≤60 min).
@@ -141,3 +209,7 @@ AUTH_USER_MODEL = 'users.User'
 - **No refresh interceptor** — user gets logged out on every expired access token instead of silently refreshing.
 - **Blacklisting disabled** — stolen refresh tokens remain valid until they naturally expire.
 - **Not using a custom User model** — nearly impossible to change later without resetting migrations.
+- **Not awaiting `getItemAsync`** — returns a Promise, not the value. Always `await` or `.then()`.
+- **Forgetting `deleteItemAsync` on logout** — iOS keychain persists across reinstall; always delete on explicit logout.
+- **Storing large JSON directly** — SecureStore silently fails or truncates over 2048 bytes. Large objects go in AsyncStorage.
+- **Reading SecureStore synchronously** — there is no synchronous API. Use `isLoading` state to gate the UI.
